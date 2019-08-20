@@ -20,12 +20,8 @@ int id_cs;	//Клиент -> Сервер
 int id_tech_sc;	//tech Сервер -> Клиент
 int id_tech_cs;	//tech Клиент -> Сервер
 int polzov = 1;
+
 ssize_t mes_prov; 
-
-
-
-
-
 
 struct tech
 {
@@ -39,16 +35,9 @@ struct users
 	char nick[50];
 	char message[50];
 };
-struct keys
-{
-	long type;
-	key_t key_cs;
-	key_t key_sc;
-};
 
 struct tech info;
 struct users inp_text;
-struct keys keys_wr;
 struct tech user_info[255];
 
 void err_id(int id)
@@ -63,36 +52,36 @@ void err_id(int id)
 void *tech_message()
 {
 	int i = 0, j = 0;
-	int poz_void[255];
 	char buff[50];
 	ssize_t mes_prov;
 	while(flag != 1)
 	{
-		mes_prov = msgrcv(id_tech_cs, &inp_text, sizeof(inp_text), 1, IPC_NOWAIT );
-		if((mes_prov != -1) && (errno == ENOMSG))
+		/*Проверяем есть ли запросы на присоединение*/
+		mes_prov = msgrcv(id_tech_cs, &info, sizeof(info), 1, IPC_NOWAIT);
+		if((mes_prov != -1))
 		{
 			user_info[polzov].status = info.status;
 			strcpy(user_info[polzov].nick, info.nick);
-			msgsnd(id_tech_sc, &keys_wr, sizeof(keys_wr),  0);
 			polzov++;
 		}
-		sleep(1);
+		sleep(2);
 		for(i = 0; i < polzov; i++)
 		{
 			user_info[i].status = 0;
+			info.type = 2;
 			msgsnd(id_tech_sc, &info, sizeof(info),  0);
 		}
-		sleep(1);
+		sleep(2);
 		for(i = 0; i < polzov; i++)
 		{
-			mes_prov = msgsnd(id_tech_cs, &info, sizeof(info),  IPC_NOWAIT);
+			mes_prov = msgrcv(id_tech_cs, &info, sizeof(info), 3, IPC_NOWAIT);
 			if(mes_prov != -1)
 			{
 				for(j = 0; j < polzov; j++)
 				{
 					if(strcmp(user_info[j].nick, info.nick) == 0)
 					{
-						strcpy(user_info[j].nick, info.nick);
+						user_info[j].status = info.status;
 					}
 				}
 			}
@@ -144,11 +133,7 @@ int main()
 	/*Получаем ник и статус пользователя*/
 	user_info[0].status = info.status;
 	strcpy(user_info[0].nick, info.nick);
-	/*Отсылаем ключи для передачи и приема информации*/
-	keys_wr.type = 2;
-	keys_wr.key_cs = key_cs;
-	keys_wr.key_sc = key_sc;
-	msgsnd(id_tech_sc, &keys_wr, sizeof(keys_wr), 0);
+
 	/*Запускаем основную работу сервера*/
 	pthread_create(&tid, NULL, tech_message, NULL);
 	while(flag != 1)
