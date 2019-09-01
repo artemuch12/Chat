@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <unistd.h>
 
 extern int errno;
 int id_sc;	//Сервер -> Клиент
@@ -12,23 +13,24 @@ int id_cs;	//Клиент -> Сервер
 int id_tech_sc;	//tech Сервер -> Клиент
 int id_tech_cs;	//tech Клиент -> Сервер
 int flag = 0;
-char nickname[50];
+char nickname[255];
 pthread_t tid_tech;
 pthread_t tid_print;
+
 struct tech
 {
 	long type;
-	char nick[50];
+	char nick[255];
 	int status;
 };
 struct users
 {
 	long type;
-	char nick[50];
-	char message[50];
+	char nick[255];
+	char message[255];
 };
 
-struct tech info;
+
 
 
 void err_id(int id)
@@ -42,14 +44,16 @@ void err_id(int id)
 
 void *tech_message()
 {
+	struct tech info;
 	ssize_t mes_prov;
 	while(flag != 1)
 	{
-		mes_prov = msgrcv(id_tech_sc, &info, sizeof(info), 2, 0);
+		mes_prov = msgrcv(id_tech_sc, (void *)&info, sizeof(info), 2L, 0);
 		strcpy(info.nick, nickname);
 		info.status = 1;
-		info.type = 3;	//Посылка подтвержение
-		msgsnd(id_tech_cs, &info, sizeof(info), 0);
+		info.type = 3L;	//Посылка подтвержение
+		msgsnd(id_tech_cs, (void *)&info, sizeof(info), 0);
+		sleep(2);
 	}
 	pthread_cancel(tid_tech);
 }
@@ -60,9 +64,16 @@ void *text_print()
 	ssize_t mes_prov;
 	while(flag != 1)
 	{
-		
-		mes_prov = msgrcv(id_sc, &inp_text, sizeof(inp_text), 1, 0);
-		printf("%s:  %s\n", inp_text.nick, inp_text.message);
+		mes_prov = msgrcv(id_sc, (void *)&inp_text, sizeof(inp_text), 1L, 0);
+		if(mes_prov != -1)
+		{
+			printf("Message sent.\n");
+			printf("%s:  %s\n", inp_text.nick, inp_text.message);
+		}
+		else
+		{
+			printf("Error sent message");
+		}
 	}
 	pthread_cancel(tid_print);
 }
@@ -70,13 +81,16 @@ void *text_print()
 
 int main()
 {
+	int i = 0;
 	void *status;
 	key_t key_sc;
 	key_t key_cs;
 	key_t key_tech_sc;
 	key_t key_tech_cs;
+	
 	char command[255];
 	struct users out_text;
+	struct tech info;
 	
 	/*Ининциализируем ключи для 4 очередей сообщений*/
 	key_tech_sc = ftok("./server", 'S');
@@ -85,27 +99,27 @@ int main()
 	key_cs = ftok("./server", 'W');
 	
 	/*Подключаемя к ОчерСооб*/
-	id_tech_sc = msgget(key_tech_sc, 0660);
+	id_tech_sc = msgget(key_tech_sc, 0666);
 	err_id(key_tech_sc);
-	id_tech_cs = msgget(key_tech_cs, 0660);
+	id_tech_cs = msgget(key_tech_cs, 0666);
 	err_id(key_tech_cs);
-	id_sc = msgget(key_sc, 0660);
+	id_sc = msgget(key_sc, 0666);
 	err_id(id_sc);
-	id_cs = msgget(key_cs, 0660);
+	id_cs = msgget(key_cs, 0666);
 	err_id(id_cs);
 	
-	/*Создаем "Имя пользозователя и отправляем его на сервер"*/
+	/*Создаем "Имя пользозователя" и отправляем его на сервер*/
 	puts("Enter nickname");
 	fgets(nickname, 50, stdin);
 	strcpy(info.nick, nickname);
-	info.type = 1;		//Тип 1 - запрос на подключение
+	info.type = 1L;		//Тип 1 - запрос на подключение
 	info.status = 1; 	//Статус 1 - говорит, что пользоваетель активен
-	msgsnd(id_tech_cs, &info, sizeof(info), 0);
+	msgsnd(id_tech_cs, (void *)&info, sizeof(info), 0);
 	
 	/*Создаем два вспомогательных потока: для технической связи и для 
 	 * печати новых сообщений на экран*/
 	pthread_create(&tid_tech, NULL, tech_message, NULL);
-	pthread_create(&tid_print, NULL, tech_message, NULL);
+	pthread_create(&tid_print, NULL, text_print, NULL);
 	
 	/*В главном потоке будем считывать вводимые сообщения до тех пор 
 	 * пока не будет набрана команда "!exit!". Считанное сообщение 
@@ -113,16 +127,23 @@ int main()
 	while(flag != 1)
 	{
 		fgets(command, 255, stdin);
-		if(strcmp(command, "!exit!\n") == 0)
+		for(i = 0; i < 255; i++)
+		{
+			if(command[i] == '\n')
+			{
+				command[i] = '\0';
+			}
+		}
+		if(strcmp(command, "!exit!") == 0)
 		{
 			flag = 1;
 		}
 		else
 		{
 			strcpy(out_text.message, command);
-			out_text.type = 1;
+			out_text.type = 1L;
 			strcpy(out_text.nick, nickname);
-			msgsnd(id_cs, &out_text, sizeof(out_text), 0);
+			msgsnd(id_cs, (void *)&out_text, sizeof(out_text), 0);
 		}
 		
 	}

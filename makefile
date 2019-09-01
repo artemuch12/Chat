@@ -1,7 +1,7 @@
 all: client server
 client: client.o
 	gcc client.o -o client -lpthread
-	rm server.o
+	rm client.o
 client.o: client.c
 	gcc -g client.c -c
 server: server.o
